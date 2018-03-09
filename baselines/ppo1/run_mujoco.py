@@ -6,9 +6,10 @@ from baselines import logger
 
 def train(env_id, num_timesteps, seed):
     from baselines.ppo1 import mlp_policy, pposgd_simple
-    U.make_session(num_cpu=1).__enter__()
+    from baselines.ppo1 import lstm_fc_policy
+    U.make_session(num_cpu=4).__enter__()
     def policy_fn(name, ob_space, ac_space):
-        return mlp_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
+        return lstm_fc_policy.LSTMFCPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
             hid_size=64, num_hid_layers=2)
     env = make_mujoco_env(env_id, seed)
     pposgd_simple.learn(env, policy_fn,
