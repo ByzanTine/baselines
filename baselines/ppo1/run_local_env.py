@@ -3,16 +3,20 @@
 from baselines.common.cmd_util import make_mujoco_env, mujoco_arg_parser
 from baselines.common import tf_util as U
 from baselines import logger
+import gym
+from test_env import *
 
 def train(env_id, num_timesteps, seed):
     from baselines.ppo1 import mlp_policy, pposgd_simple
     from baselines.ppo1 import lstm_fc_policy
+    from baselines.ppo1 import lstm_fc_discrete_policy
     from baselines.ppo1 import one_lstm_policy
+    from baselines.ppo1 import mlp_discrete_policy 
     U.make_session(num_cpu=4).__enter__()
     def policy_fn(name, ob_space, ac_space):
-        return mlp_discrete_policy.MlpPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
+        return lstm_fc_discrete_policy.LSTMFCPolicy(name=name, ob_space=ob_space, ac_space=ac_space,
             hid_size=64, num_hid_layers=2)
-    env = make_mujoco_env(env_id, seed)
+    env = gym.make(env_id)
     pposgd_simple.learn(env, policy_fn,
             max_timesteps=num_timesteps,
             timesteps_per_actorbatch=2048,

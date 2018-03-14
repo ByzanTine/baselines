@@ -5,7 +5,7 @@ import tensorflow.contrib.rnn as rnn
 import gym
 from baselines.common.distributions import make_pdtype
 
-class LSTMFCPolicy(object):
+class OLSTMFCPolicy(object):
     recurrent = True 
     def __init__(self, name, *args, **kwargs):
         with tf.variable_scope(name):
@@ -32,28 +32,42 @@ class LSTMFCPolicy(object):
 
         with tf.variable_scope('pol'):
             last_out = obz
-            def sub_pol(input_m, scope):
-                state_embedding = tf.tile(tf.expand_dims(input_m, axis=1), [1, 1, 1])
-                rnn_cell = rnn.BasicLSTMCell(
-                  num_units=pdtype.param_shape()[0])
-                last_out, states = tf.nn.dynamic_rnn(
-                  cell=rnn_cell,
-                  inputs=state_embedding,
-                  dtype=tf.float32, scope=scope)
-                return tf.squeeze(last_out, axis=1)
-            ppsl = []
-            for i in range(4):
-                ppsl.append(sub_pol(obz, 'pol' + '/' + str(i)))
-            last_out = tf.concat(ppsl, axis=1) 
+            num_policy = 1
+            state_embedding = tf.tile(tf.expand_dims(obz, axis=1), [1, num_policy, 1])
+
+            rnn_cell = rnn.BasicLSTMCell(num_units=pdtype.param_shape()[0])
+
+            self.sub_policies, states = tf.nn.dynamic_rnn(cell=rnn_cell,
+                                                          inputs=state_embedding,
+                                                          dtype=tf.float32,
+                                                          scope='subpolicy')
+
+            lstm_cell = rnn.BasicLSTMCell(num_units=num_policy)
+
+            concatenated = tf.concat([self.sub_policies, state_embedding],
+                                     axis=2)
+
+            self.out, states = tf.nn.dynamic_rnn(cell=lstm_cell,
+                                                 inputs=concatenated,
+                                                 dtype=tf.float32, scope='master')
+            last_output = self.out[:, -1, :]
+
+            self.chosen_index = tf.argmax(last_output, axis=1)
+            # self.weights = tf.nn.softmax(logits=last_output, dim=
+            self.weights = tf.one_hot(indices=self.chosen_index,
+                                      depth=num_policy)
+
+            last_out = tf.reduce_sum(
+                tf.expand_dims(self.weights, axis=2) * self.sub_policies, axis=1)
 	    
             if gaussian_fixed_var and isinstance(ac_space, gym.spaces.Box):
-                mean = tf.layers.dense(last_out, pdtype.param_shape()[0]//2, name='final', kernel_initializer=U.normc_initializer(0.01), activity_regularizer=tf.contrib.layers.l2_regularizer(0.01))
+                mean = tf.layers.dense(last_out, pdtype.param_shape()[0]//2, name='final', kernel_initializer=U.normc_initializer(0.01))
                 logstd = tf.get_variable(name="logstd", shape=[1, pdtype.param_shape()[0]//2], initializer=tf.zeros_initializer())
                 pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
             else:
-                pdparam = tf.layers.dense(last_out, pdtype.param_shape()[0], name='final', kernel_initializer=U.normc_initializer(0.01), activity_regularizer=tf.contrib.layers.l2_regularizer(0.01))
+                pdparam = tf.layers.dense(last_out, pdtype.param_shape()[0], name='final', kernel_initializer=U.normc_initializer(0.01))
 
-        self.pd = pdtype.pdfromflat(pdparam)
+        self.pd = pdtype.pdfromflat(last_out)
 
         self.state_in = []
         self.state_out = []

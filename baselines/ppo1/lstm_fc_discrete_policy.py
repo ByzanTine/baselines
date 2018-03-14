@@ -13,7 +13,6 @@ class LSTMFCPolicy(object):
             self.scope = tf.get_variable_scope().name
 
     def _init(self, ob_space, ac_space, hid_size, num_hid_layers, gaussian_fixed_var=True):
-        assert isinstance(ob_space, gym.spaces.Box)
 
         self.pdtype = pdtype = make_pdtype(ac_space)
         sequence_length = None
@@ -26,12 +25,14 @@ class LSTMFCPolicy(object):
         with tf.variable_scope('vf'):
             obz = tf.clip_by_value((ob - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
             last_out = obz
+            last_out = tf.one_hot(indices=tf.cast(last_out, dtype=tf.int32), depth=ob_space.n)
             for i in range(num_hid_layers):
                 last_out = tf.nn.tanh(tf.layers.dense(last_out, hid_size, name="fc%i"%(i+1), kernel_initializer=U.normc_initializer(1.0)))
             self.vpred = tf.layers.dense(last_out, 1, name='final', kernel_initializer=U.normc_initializer(1.0))[:,0]
 
         with tf.variable_scope('pol'):
             last_out = obz
+            last_out = tf.one_hot(indices=tf.cast(last_out, dtype=tf.int32), depth=ob_space.n)
             def sub_pol(input_m, scope):
                 state_embedding = tf.tile(tf.expand_dims(input_m, axis=1), [1, 1, 1])
                 rnn_cell = rnn.BasicLSTMCell(
@@ -43,7 +44,7 @@ class LSTMFCPolicy(object):
                 return tf.squeeze(last_out, axis=1)
             ppsl = []
             for i in range(4):
-                ppsl.append(sub_pol(obz, 'pol' + '/' + str(i)))
+                ppsl.append(sub_pol(last_out, 'pol' + '/' + str(i)))
             last_out = tf.concat(ppsl, axis=1) 
 	    
             if gaussian_fixed_var and isinstance(ac_space, gym.spaces.Box):
@@ -63,7 +64,7 @@ class LSTMFCPolicy(object):
         self._act = U.function([stochastic, ob], [ac, self.vpred])
 
     def act(self, stochastic, ob):
-        ac1, vpred1 =  self._act(stochastic, ob[None])
+        ac1, vpred1 =  self._act(stochastic, [ob])
         return ac1[0], vpred1[0]
     def get_variables(self):
         return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, self.scope)
