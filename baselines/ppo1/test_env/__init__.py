@@ -19,3 +19,30 @@ register(
     id='KeyDoor-v1',
     entry_point='test_env.envs.key_door:KeyDoor',
 )
+
+register(
+    id='DoubleCartPole-v1',
+    entry_point='test_env.envs.double_cart_pole:MultipleCartPoleEnv',
+    max_episode_steps=200,
+    reward_threshold=195.0,
+)
+
+register(
+    id='QuadCartPole-v1',
+    kwargs={
+        'num_tasks': 4,
+    },
+    entry_point='test_env.envs.double_cart_pole:MultipleCartPoleEnv',
+    max_episode_steps=200,
+    reward_threshold=195.0,
+)
+
+register(
+    id='16CartPole-v1',
+    kwargs={
+        'num_tasks': 16,
+    },
+    entry_point='test_env.envs.double_cart_pole:MultipleCartPoleEnv',
+    max_episode_steps=200,
+    reward_threshold=195.0,
+)
